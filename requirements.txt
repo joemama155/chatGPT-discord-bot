@@ -1,3 +1,0 @@
-discord.py==2.1.0
-openai==0.25.0
-asgiref==3.6.0
