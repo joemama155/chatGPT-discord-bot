@@ -3,6 +3,8 @@ from asgiref.sync import sync_to_async
 
 from typing import Optional
 
+MAX_PROMPT_LENGTH = 4096
+
 class OpenAI:
     """ API client for OpenAI.
     """
