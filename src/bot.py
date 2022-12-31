@@ -1,22 +1,21 @@
 import discord
 from discord import app_commands
-from src import responses
-from src import log
+
+from src.openai_client import OpenAI
+
 import time
 from typing import Optional
 import random
-import sys
+import logging
 
-logger = log.setup_logger(__name__)
+logging.basicConfig(
+    level=logging.DEBUG,
+    handlers=[
+        logging.StreamHandler(),
+    ],
+)
 
-config = responses.get_config()
-
-isPrivate = False
-
-BACKUP_PROMPTS = []
-with open("backup-prompts.txt", 'r') as f:
-    for line in f:
-        BACKUP_PROMPTS.append(line.strip())
+logger = logging.getLogger(__name__)
 
 message_history = {} # keys: non bot user ID, values: list of tuples where (is bot?, message)
 myname = "Bot"
