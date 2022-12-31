@@ -7,10 +7,16 @@ Provides access to OpenAI models via a Discord bot.
 - [Development](#development)
 
 # Overview
-A Python Discord bot which provides access to OpenAI's GPT3. Fork of [@Zero6992's chatGPT-discord-bot repository](https://github.com/Zero6992/chatGPT-discord-bot). Provides the modifications:
+A Python Discord bot which provides access to OpenAI's GPT3. Inspired by [@Zero6992's chatGPT-discord-bot repository](https://github.com/Zero6992/chatGPT-discord-bot). Provides the modifications:
 
-- Provides a conversation transcript to GPT3 as part of the prompt so the model appears to "remember" a portion of the conversation
-- Code refactored to bit (Env vars for config, Python virtual environments, and more)
+- Major components rewritten
+   - Using PyCord instead of DiscordPy
+   - Env vars used for configuration
+   - Python virtual environment
+   - Docker development setup
+- Features added
+   - History between bot and users saved in Redis
+   - Provides a transcript of the bot's conversation as part of the GPT3 prompt so the model appears to "remember" a portion of the conversation
 
 # Setup
 ## Configuration
