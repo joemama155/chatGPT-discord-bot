@@ -3,7 +3,9 @@ FROM python:3.8
 RUN mkdir -p /DiscordBot
 WORKDIR /DiscordBot
 
-RUN pip install pipenv
-RUN pipenv install
+COPY ./Pipfile ./Pipfile.lock ./
 
-CMD ["pipenv", "run", "main.py"]
+RUN pip install pipenv
+RUN pipenv install --dev
+
+CMD ["pipenv", "run", "watchmedo", "shell-command", "--command", "python main.py"]
