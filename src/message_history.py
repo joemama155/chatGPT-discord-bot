@@ -1,9 +1,18 @@
 import os
 import json
 from typing import List, Optional
+import abc
 
 from pydantic import BaseModel
 import redis.asyncio as redis
+
+class UsernamesMapper(abc.ABC):
+    """ Converts user IDs to usernames.
+    """
+
+    @abc.abstractmethod
+    def get_username(user_id: int) -> str:
+        raise NotImplementedError()
 
 class HistoryMessage(BaseModel):
     """ One message sent by one user.
@@ -13,6 +22,14 @@ class HistoryMessage(BaseModel):
     """
     author_id: int
     body: str
+
+    def as_transcript_str(self, usernames_mapper: UsernamesMapper) -> str:
+        """ Convert history message into a script format string.
+        Arguments:
+        - usernames_mapper: Implementation of username mapper
+        Returns: History message in format <username>: <body>
+        """
+        return f"{usernames_mapper.get_username(self.author_id)}: {self.body}"
     
 class ConversationHistory(BaseModel):
     """ History of messages between users.
@@ -23,13 +40,25 @@ class ConversationHistory(BaseModel):
     interacting_user_id: int
     messages: List[HistoryMessage]
 
-    def all_messages_body_len(self) -> int:
-        """ Count the length of all message body's.
-        Returns: Count of characters.
+    def as_transcript_lines(self, usernames_mapper: UsernamesMapper) -> List[str]:
+        """ Converts history into transcript lines.
+        Arguments:
+        - usernames_mapper: Implementation of username mapper
+
+        Returns: List of transcript lines
+        """
+        return list(map(lambda msg: msg.as_transcript_str(usernames_mapper), self.messages))
+
+    def all_messages_transcript_len(self, usernames_mapper: UsernamesMapper) -> int:
+        """ Count the length of all transcript lines.
+        Arguments:
+        - usernames_mapper: Implementation of username mapper
+
+        Returns: Count in characters.
         """
         count = 0
-        for msg in self.messages:
-            count += len(msg.body)
+        for line in self.as_transcript_lines(usernames_mapper):
+            count += len(line)
 
         return count
 
@@ -39,10 +68,12 @@ class MessageHistoryRepo:
     
     Fields:
     - redis_client: The Redis client
+    - username_mapper: Implementation of usernames mapper
     """
     redis_client: redis.Redis
+    usernames_mapper: UsernamesMapper
 
-    async def __init__(self):
+    async def __init__(self, usernames_mapper: UsernamesMapper):
         """ Initializes.
         Creates the Redis client from the REDIS_{HOST,PORT,DB} env vars.
         """
@@ -51,6 +82,7 @@ class MessageHistoryRepo:
             port=int(os.getenv('REDIS_PORT', "6379")),
             db=int(os.getenv('REDIS_DB', "0")),
         )
+        self.usernames_mapper = usernames_mapper
 
     def get_conversation_history_key(self, interacting_user_id: int) -> str:
         """ Generate the Redis key for a conversation history item.
@@ -125,12 +157,12 @@ class MessageHistoryRepo:
             history.messages.append(msg)
 
             # Remove messages until below max length
-            history_len = history.all_messages_body_len()
+            history_len = history.all_messages_transcript_len(self.usernames_mapper)
 
             while history_len > max_conversation_characters:
                 # Remove oldest messages
                 removed_msg = history.messages.pop(0)
-                history_len -= len(removed_msg.body)
+                history_len -= len(removed_msg.as_transcript_str(self.usernames_mapper))
 
             # Save new history
             await self.save_conversation_history(history)
