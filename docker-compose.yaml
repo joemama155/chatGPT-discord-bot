@@ -6,5 +6,7 @@ services:
       dockerfile: dev.Dockerfile
     volumes:
       - ./:/DiscordBot
+    env_file:
+      - dev.env
   redis:
     image: redis:7.0.7-alpine

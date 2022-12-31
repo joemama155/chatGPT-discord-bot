@@ -39,7 +39,7 @@ The [`Dockerfile`](./Dockerfile) in the repository root performs these steps aut
 # Development
 The [`docker-compose.yaml`](./docker-compose.yaml) and [`dev.Dockerfile`](./dev.Dockerfile) files provide a development environment which is pre-setup. To use:
 
-1. Make a copy of `.env-dev.example` named `.env-dev` and fill in your own values
+1. Make a copy of `dev-example.env` named `dev.env` and fill in your own values
 2. Launch the Docker Compose stack:
    ```
    docker compose up -d --build
