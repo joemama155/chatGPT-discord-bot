@@ -77,20 +77,32 @@ class MessageHistoryRepo:
     Fields:
     - redis_client: The Redis client
     - username_mapper: Implementation of usernames mapper
+    - redis_host: Redis server host
+    - redis_port: Redis server port
+    - redis_db: Redis server database number
     """
     redis_client: redis.Redis
     usernames_mapper: UsernamesMapper
 
-    async def __init__(self, usernames_mapper: UsernamesMapper):
+    redis_host: str
+    redis_port: int
+    redis_db: int
+
+    async def init(self, usernames_mapper: UsernamesMapper, redis_host: str, redis_port: int, redis_db: int):
         """ Initializes.
-        Creates the Redis client from the REDIS_{HOST,PORT,DB} env vars.
+        Arguments:
+        - host: Redis host
+        - port: Redis port
+        - db: Redis database number
         """
         self.redis_client = redis.Redis(
-            host=os.getenv('REDIS_HOST', "redis"),
-            port=int(os.getenv('REDIS_PORT', "6379")),
-            db=int(os.getenv('REDIS_DB', "0")),
+            host=host,
+            port=port,
+            db=db,
         )
         self.usernames_mapper = usernames_mapper
+
+        await self.redis_client.ping()
 
     def get_conversation_history_key(self, interacting_user_id: int) -> str:
         """ Generate the Redis key for a conversation history item.

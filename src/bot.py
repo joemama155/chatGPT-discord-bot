@@ -1,12 +1,9 @@
 import discord
-from discord.ext import commands
 
 from src.openai_client import OpenAI
 from src.message_history import MessageHistoryRepo, UsernamesMapper
 
-import time
-from typing import Optional
-import random
+from typing import Optional, List
 import logging
 import os
 
@@ -35,14 +32,14 @@ class DiscordUsernamesMapper(UsernamesMapper):
     Fields:
     - discord_client: Discord client
     """
-    discord_bot: discord.Client
+    discord_client: discord.Client
 
-    def __init__(self, discord_bot: discord.Client):
+    def __init__(self, discord_client: discord.Client):
         """ Initializes.
         Arguments:
         - discord_client: Discord client
         """
-        self.discord_bot = discord_bot
+        self.discord_client = discord_client
 
     def get_username(self, user_id: int) -> str:
         """ Get a user's Discord username.
@@ -51,57 +48,78 @@ class DiscordUsernamesMapper(UsernamesMapper):
 
         Returns: Discord username
         """
-        user = self.discord_bot.get_user(user_id)
+        user = self.discord_client.get_user(user_id)
         if user is None:
             raise DiscordUsernameNotFound(user_id)
 
         return user.display_name
         
-
-class DiscordBot(commands.Cog):
-    """ Discord bot implementation.
-    - discord_client: Discord client
-    - logger: Logger
-    """
-    discord_bot: discord.Client
+""" class DiscordCommands(discord):
+     Cog which implements bot slash commands.
+    Fields:
+    - bot: Discord bot client instance
+    
+    bot: commands.Bot
     logger: logging.Logger
 
-    def __init__(self, discord_bot: discord.Client, logger: logging.Logger):
-        """ Initialize.
-        """
-        self.discord_bot = discord_bot
+    def __init__(self, bot: commands.Bot, logger: logging.Logger):
+        self.bot = bot
         self.logger = logger
+
+        self.bot.slash(name="chat", description="Chat with GPT3", guild_id=int(os.getenv('DISCORD_GUILD_ID')))(self.chat)
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.logger.info("Commands are ready")
+        self.logger.info("Ready")
 
-class DiscordClient(discord.Client):
-    def __init__(self):
+    async def chat(self, ctx: commands.Context, prompt: str):
+        ctx.reply("hello world")
+ """
+class DiscordBot(discord.Bot):
+    """ Discord bot client.
+    Fields:
+    - logger: Logger
+    - guild_ids: Discord server IDs for which bot will respond
+    - msg_history: Message history repository
+    """
+    logger: logging.Logger
+    guild_ids: List[int]
+    msg_history: MessageHistoryRepo
+
+    def __init__(self, logger: logging.Logger, guild_ids: List[int], msg_history: MessageHistoryRepo) -> None:
         super().__init__(intents=discord.Intents.default())
-        self.tree = discord.app_commands.CommandTree(self)
+        self.logger = logger
+        self.guild_ids = guild_ids
 
-    async def setup_hook(self):
-        bot_guild = discord.Object(id=int(os.getenv('DISCORD_GUILD_ID')))
+        self.msg_history = msg_history
 
-        self.tree.copy_global_to(guild=bot_guild)
-        await self.tree.sync(guild=bot_guild)
+        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
+
+    async def on_ready(self):
+        self.logger.info("Ready")
+        await self.msg_history.init(
+            usernames_mapper=DiscordUsernamesMapper(self),
+            redis_host=os.getenv('REDIS_HOST', "redis"),
+            redis_port=int(os.getenv('REDIS_PORT', "6379")),
+            redis_db=int(os.getenv('REDIS_DB', "0")),
+        )
+
+    async def chat(self, interaction: discord.Interaction, prompt: str):
+        await interaction.response.send_message(f"hello world: {prompt}")
 
 
 async def run_bot():
     logger.info("Run bot started")
 
-    discord.utils.setup_logging(level=logging.INFO)
-    bot = DiscordClient()
+    bot = DiscordBot(
+        logger=logger.getChild("discord.bot"),
+        guild_ids=[int(os.getenv('DISCORD_GUILD_ID'))],
+        msg_history=MessageHistoryRepo()
+    )
+    bot.msg_history.discord_client = bot
     
-
-    @bot.tree.command(name="chat", description="Have a chat with GPT3")
-    async def chat(interaction: discord.Interaction, prompt: str):
-        """ Runs when a user invokes the chat command.
-        Arguments:
-        - interaction: The slash command interaction
-        """
-        logger.info("hi")
-
-    async with bot:
-        await bot.start(os.getenv('DISCORD_BOT_TOKEN'))
+    """   await bot.add_cog(DiscordCommands(
+            bot=bot,
+            logger=logger.getChild("commands"),
+    )) """
+    await bot.start(os.getenv('DISCORD_BOT_TOKEN'))
