@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+"discord.py" = "==2.1.0"
+openai = "==0.25.0"
+asgiref = "==3.6.0"
+
+[dev-packages]
+
+[requires]
+python_version = "3.11"
