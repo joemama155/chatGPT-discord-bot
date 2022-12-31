@@ -54,27 +54,6 @@ class DiscordUsernamesMapper(UsernamesMapper):
 
         return user.display_name
         
-""" class DiscordCommands(discord):
-     Cog which implements bot slash commands.
-    Fields:
-    - bot: Discord bot client instance
-    
-    bot: commands.Bot
-    logger: logging.Logger
-
-    def __init__(self, bot: commands.Bot, logger: logging.Logger):
-        self.bot = bot
-        self.logger = logger
-
-        self.bot.slash(name="chat", description="Chat with GPT3", guild_id=int(os.getenv('DISCORD_GUILD_ID')))(self.chat)
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        self.logger.info("Ready")
-
-    async def chat(self, ctx: commands.Context, prompt: str):
-        ctx.reply("hello world")
- """
 class DiscordBot(discord.Bot):
     """ Discord bot client.
     Fields:
@@ -118,8 +97,4 @@ async def run_bot():
     )
     bot.msg_history.discord_client = bot
     
-    """   await bot.add_cog(DiscordCommands(
-            bot=bot,
-            logger=logger.getChild("commands"),
-    )) """
     await bot.start(os.getenv('DISCORD_BOT_TOKEN'))
