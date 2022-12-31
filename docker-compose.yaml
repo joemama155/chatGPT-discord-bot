@@ -1,7 +1,9 @@
 version: "3"
 services:
   chatgpt-discord-bot:
-    build: .
+    build:
+      context: ./
+      dockerfile: dev.Dockerfile
     volumes:
       - ./:/DiscordBot
   redis:
