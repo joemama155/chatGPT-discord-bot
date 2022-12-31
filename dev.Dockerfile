@@ -8,4 +8,4 @@ COPY ./Pipfile ./Pipfile.lock ./
 RUN pip install pipenv
 RUN pipenv install --dev
 
-CMD ["pipenv", "run", "watchmedo", "shell-command", "--command", "python main.py"]
+CMD ["pipenv", "run", "watchmedo", "auto-restart", "--recursive", "python", "main.py"]

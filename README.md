@@ -16,9 +16,14 @@ A Python Discord bot which provides access to OpenAI's GPT3. Fork of [@Zero6992'
 ## Configuration
 Configuration values are set via the following environment variables:
 - `OPENAI_API_KEY`: Your OpenAPI API key
-- `REDIS_HOST`: Hostname of Redis server (Default: `redis`)
-- `REDIS_PORT`: Port number of Redis server (Default: `6379`)
-- `REDIS_DB`: Database number of Redis server (Default: `0`)
+- Redis
+   - `REDIS_HOST`: Hostname of Redis server (Default: `redis`)
+   - `REDIS_PORT`: Port number of Redis server (Default: `6379`)
+   - `REDIS_DB`: Database number of Redis server (Default: `0`)
+- Discord
+   - `DISCORD_GUILD_ID`: ID of Discord server in which Bot will run
+   - `DISCORD_BOT_TOKEN`: API token for Discord bot
+   - `DISCORD_CHANNEL_ID`: If provided then the bot will only interact in the provided channel
 
 ## Install & Run
 Pipenv is used to manage a Python virtual environment. Install dependencies and then activate the environment:
