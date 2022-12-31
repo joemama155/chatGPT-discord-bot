@@ -1,4 +1,7 @@
-from src import bot
+import asyncio
+
+from src.bot import run_bot
 
 if __name__ == '__main__': 
-    bot.run_discord_bot()
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(run_bot())

@@ -11,7 +11,15 @@ class UsernamesMapper(abc.ABC):
     """
 
     @abc.abstractmethod
-    def get_username(user_id: int) -> str:
+    def get_username(self, user_id: int) -> str:
+        """ Get a user's name.
+        Arguments:
+        - user_id: ID of user
+
+        Raises: Any error if fails to get username
+
+        Returns: Username
+        """
         raise NotImplementedError()
 
 class HistoryMessage(BaseModel):
