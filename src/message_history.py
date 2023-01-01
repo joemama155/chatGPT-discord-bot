@@ -2,6 +2,7 @@ import os
 import json
 from typing import List, Optional
 import abc
+import logging
 
 from pydantic import BaseModel
 import redis.asyncio as redis
@@ -11,7 +12,7 @@ class UsernamesMapper(abc.ABC):
     """
 
     @abc.abstractmethod
-    def get_username(self, user_id: int) -> str:
+    async def get_username(self, user_id: int) -> str:
         """ Get a user's name.
         Arguments:
         - user_id: ID of user
@@ -31,13 +32,13 @@ class HistoryMessage(BaseModel):
     author_id: int
     body: str
 
-    def as_transcript_str(self, usernames_mapper: UsernamesMapper) -> str:
+    async def as_transcript_str(self, usernames_mapper: UsernamesMapper) -> str:
         """ Convert history message into a script format string.
         Arguments:
         - usernames_mapper: Implementation of username mapper
         Returns: History message in format <username>: <body>
         """
-        return f"{usernames_mapper.get_username(self.author_id)}: {self.body}"
+        return f"{await usernames_mapper.get_username(self.author_id)}: {self.body}"
     
 class ConversationHistory(BaseModel):
     """ History of messages between users.
@@ -48,16 +49,20 @@ class ConversationHistory(BaseModel):
     interacting_user_id: int
     messages: List[HistoryMessage]
 
-    def as_transcript_lines(self, usernames_mapper: UsernamesMapper) -> List[str]:
+    async def as_transcript_lines(self, usernames_mapper: UsernamesMapper) -> List[str]:
         """ Converts history into transcript lines.
         Arguments:
         - usernames_mapper: Implementation of username mapper
 
         Returns: List of transcript lines
         """
-        return list(map(lambda msg: msg.as_transcript_str(usernames_mapper), self.messages))
+        lines = []
+        for msg in self.messages:
+            lines.append(await msg.as_transcript_str(usernames_mapper))
 
-    def all_messages_transcript_len(self, usernames_mapper: UsernamesMapper) -> int:
+        return lines
+
+    async def all_messages_transcript_len(self, usernames_mapper: UsernamesMapper) -> int:
         """ Count the length of all transcript lines.
         Arguments:
         - usernames_mapper: Implementation of username mapper
@@ -65,7 +70,7 @@ class ConversationHistory(BaseModel):
         Returns: Count in characters.
         """
         count = 0
-        for line in self.as_transcript_lines(usernames_mapper):
+        for line in await self.as_transcript_lines(usernames_mapper):
             count += len(line)
 
         return count
@@ -84,10 +89,6 @@ class MessageHistoryRepo:
     redis_client: redis.Redis
     usernames_mapper: UsernamesMapper
 
-    redis_host: str
-    redis_port: int
-    redis_db: int
-
     async def init(self, usernames_mapper: UsernamesMapper, redis_host: str, redis_port: int, redis_db: int):
         """ Initializes.
         Arguments:
@@ -96,9 +97,9 @@ class MessageHistoryRepo:
         - db: Redis database number
         """
         self.redis_client = redis.Redis(
-            host=host,
-            port=port,
-            db=db,
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
         )
         self.usernames_mapper = usernames_mapper
 
@@ -162,7 +163,9 @@ class MessageHistoryRepo:
         Returns: The conversation history with the message added
         """
         # Acquire a lock so no one else modifies this history
+        logging.info("getting lock")
         async with self.redis_client.lock(self.get_conversation_history_lock_key(interacting_user_id)):
+            logging.info("locked")
             # Get existing history
             history = await self.get_conversation_history(interacting_user_id)
 
@@ -177,14 +180,18 @@ class MessageHistoryRepo:
             history.messages.append(msg)
 
             # Remove messages until below max length
-            history_len = history.all_messages_transcript_len(self.usernames_mapper)
+            history_len = await history.all_messages_transcript_len(self.usernames_mapper)
 
             while history_len > max_conversation_characters:
                 # Remove oldest messages
                 removed_msg = history.messages.pop(0)
                 history_len -= len(removed_msg.as_transcript_str(self.usernames_mapper))
 
+            logging.info("past trim")
+
             # Save new history
             await self.save_conversation_history(history)
+
+            logging.info("saved")
 
             return history
