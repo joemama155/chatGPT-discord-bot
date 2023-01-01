@@ -3,7 +3,7 @@ import discord
 from src.openai_client import OpenAI, MAX_PROMPT_LENGTH
 from src.message_history import MessageHistoryRepo, UsernamesMapper, HistoryMessage, ConversationHistory
 
-from typing import Optional, List
+from typing import Optional, List, Dict
 import logging
 import os
 
@@ -33,6 +33,7 @@ class DiscordUsernamesMapper(UsernamesMapper):
     - discord_client: Discord client
     """
     discord_client: discord.Client
+    cache: Dict[int, str]
 
     def __init__(self, discord_client: discord.Client):
         """ Initializes.
@@ -40,6 +41,7 @@ class DiscordUsernamesMapper(UsernamesMapper):
         - discord_client: Discord client
         """
         self.discord_client = discord_client
+        self.cache = {}
 
     async def get_username(self, user_id: int) -> str:
         """ Get a user's Discord username.
@@ -48,9 +50,14 @@ class DiscordUsernamesMapper(UsernamesMapper):
 
         Returns: Discord username
         """
-        user = await self.discord_client.fetch_user(user_id)
+        if user_id in self.cache:
+            return self.cache[user_id]
+        
+        user = await self.discord_client.get_or_fetch_user(user_id)
         if user is None:
             raise DiscordUsernameNotFound(user_id)
+
+        self.cache[user_id] = user.display_name
 
         return user.display_name
 
@@ -96,13 +103,12 @@ class DiscordBot(discord.Bot):
         - interaction: Slash command interaction
         - prompt: Slash command prompt argument
         """
-        self.logger.info("prompt: %s", prompt)
+        self.logger.info("received /chat %s", prompt)
         try:
             await interaction.response.defer()
 
             # Check prompt isn't too long
             if len(prompt) > MAX_PROMPT_LENGTH:
-                self.logger("Prompt too long")
                 await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
                 return
 
@@ -141,8 +147,6 @@ class DiscordBot(discord.Bot):
                 ),
                 max_conversation_characters=MAX_PROMPT_LENGTH,
             )
-
-            self.logger.info("I SAID: %s", ai_resp)
 
             await interaction.followup.send(content=ai_resp)
         except Exception as e:
