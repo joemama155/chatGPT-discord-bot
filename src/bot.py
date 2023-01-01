@@ -103,7 +103,7 @@ class DiscordBot(discord.Bot):
             # Check prompt isn't too long
             if len(prompt) > MAX_PROMPT_LENGTH:
                 self.logger("Prompt too long")
-                await interaction.response.edit_message(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
+                await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
                 return
 
             # Record the user's prompt in their history
@@ -130,7 +130,7 @@ class DiscordBot(discord.Bot):
             ai_resp = await self.openai_client.create_completion(transcript)
             if ai_resp is None:
                 self.logger("No AI response")
-                await interaction.response.edit_message(self.compose_error_msg("The AI did not know what to say"))
+                await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                 return
 
             await self.msg_history.append_message(
@@ -144,12 +144,12 @@ class DiscordBot(discord.Bot):
 
             self.logger.info("I SAID: %s", ai_resp)
 
-            await interaction.response.edit_message(content=ai_resp)
+            await interaction.followup.send(content=ai_resp)
         except Exception as e:
             self.logger.exception("Failed to handled /chat command: %s", e)
 
             try:
-                await interaction.response.edit_message(content=self.compose_error_msg("Unknown error occurred"))
+                await interaction.followup.send(content=self.compose_error_msg("Unknown error occurred"))
             except Exception as e:
                 self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 

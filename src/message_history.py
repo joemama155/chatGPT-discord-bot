@@ -2,7 +2,6 @@ import os
 import json
 from typing import List, Optional
 import abc
-import logging
 
 from pydantic import BaseModel
 import redis.asyncio as redis
@@ -163,9 +162,7 @@ class MessageHistoryRepo:
         Returns: The conversation history with the message added
         """
         # Acquire a lock so no one else modifies this history
-        logging.info("getting lock")
         async with self.redis_client.lock(self.get_conversation_history_lock_key(interacting_user_id)):
-            logging.info("locked")
             # Get existing history
             history = await self.get_conversation_history(interacting_user_id)
 
@@ -187,11 +184,7 @@ class MessageHistoryRepo:
                 removed_msg = history.messages.pop(0)
                 history_len -= len(removed_msg.as_transcript_str(self.usernames_mapper))
 
-            logging.info("past trim")
-
             # Save new history
             await self.save_conversation_history(history)
-
-            logging.info("saved")
 
             return history
