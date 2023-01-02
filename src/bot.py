@@ -109,6 +109,7 @@ class DiscordBot(discord.Bot):
 
         self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
         self.slash_command(name="transcript", description="Reveal the chat transcript being recorded by the bot", guild_ids=self.guild_ids)(self.transcript)
+        self.slash_command(name="clear-transcript", description="Clear the transcript of you and the bots previous messages", guild_ids=self.guild_ids)(self.clear_transcript)
 
     async def on_ready(self):
         self.logger.info("Ready")
@@ -204,7 +205,7 @@ class DiscordBot(discord.Bot):
 
     async def transcript(self, interaction: discord.Interaction):
         """ /transcript
-        User gives the bot a prompt and it responds with GPT3.
+        Prints the user and bots transcript.
         Arguments:
         - interaction: Slash command interaction
         """
@@ -223,7 +224,11 @@ class DiscordBot(discord.Bot):
                 username = await self.conversation_history_repo.usernames_mapper.get_username(msg.author_id)
                 transcript_lines.append(f"**{username}:** {msg.body}")
 
-            transcript = "\n".join(transcript_lines)
+            transcript = ""
+            if len(history.messages) > 0:
+                transcript = "\n".join(transcript_lines)
+            else:
+                transcript = "*No transcript history*"
 
             interaction_txt = """\
 Here is our conversation:
@@ -231,6 +236,37 @@ Here is our conversation:
 {transcript}""".format(transcript=transcript)
 
             await interaction.followup.send(content=interaction_txt)
+
+        except Exception as e:
+            self.logger.exception("Failed to run /transcript handler: %s", e)
+
+            try:
+                await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
+            except Exception as e:
+                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+
+    async def clear_transcript(self, interaction: discord.Interaction):
+        """ /clear-transcript
+        Delete the user's message history.
+        Arguments:
+        - interaction: Slash command interaction
+        """
+        try:
+            self.logger.info("received /clear-transcript")
+
+            await interaction.response.defer()
+
+            if not await self.check_channel_allowed(interaction):            
+                return
+
+            history = await self.conversation_history_repo.get(interaction.user.id)
+
+            async with await history.lock():
+                history.messages = []
+
+                await history.save()
+
+            await interaction.followup.send(content="I have cleared our conversation history, all is forgotten :wink:")
 
         except Exception as e:
             self.logger.exception("Failed to run /transcript handler: %s", e)
