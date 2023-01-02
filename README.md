@@ -70,5 +70,5 @@ The [`docker-compose.yaml`](./docker-compose.yaml) and [`dev.Dockerfile`](./dev.
    - Include a short description of the changes
    - Include the Docker image tag by writing:
      ```
-     Docker image: `noahhuppert/chatgpt-discord-bot:vx.y.z
+     Docker image: `noahhuppert/chatgpt-discord-bot:vx.y.z`
      ```
