@@ -108,12 +108,26 @@ class DiscordBot(discord.Bot):
         self.openai_client = openai_client
 
         self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
+        self.slash_command(name="transcript", description="Reveal the chat transcript being recorded by the bot", guild_ids=self.guild_ids)(self.transcript)
 
     async def on_ready(self):
         self.logger.info("Ready")
 
     def compose_error_msg(self, msg: str) -> str:
         return f"> Error: {msg}"
+
+    async def check_channel_allowed(self, interaction: discord.Interaction) -> bool:
+        # Check if we are being limited to a channel
+        if self.channel_id is not None and interaction.channel_id != self.channel_id:
+            self.logger.error("Message in wrong channel %d (only allowed in: %d)", interaction.channel_id, self.channel_id)
+            await interaction.followup.send_message(
+                ephemeral=True,
+                content=self.compose_error_msg(f"Only allowed to respond to messages in the <#{self.channel_id}> channel")
+            )
+
+            return False
+
+        return True
 
     async def chat(self, interaction: discord.Interaction, prompt: str):
         """ /chat <prompt>
@@ -125,16 +139,10 @@ class DiscordBot(discord.Bot):
         try:
             self.logger.info("received /chat %s", prompt)
 
-            # Check if we are being limited to a channel
-            if self.channel_id is not None and interaction.channel_id != self.channel_id:
-                self.logger.error("Message in wrong channel %d (only allowed in: %d)", interaction.channel_id, self.channel_id)
-                await interaction.response.send_message(
-                    ephemeral=True,
-                    content=self.compose_error_msg(f"Only allowed to respond to messages in the <#{self.channel_id}> channel")
-                )
-                return
-            
             await interaction.response.defer()
+
+            if not await self.check_channel_allowed(interaction):            
+                return
 
             # Check prompt isn't too long
             if len(prompt) > MAX_PROMPT_LENGTH:
@@ -188,6 +196,41 @@ class DiscordBot(discord.Bot):
                 await interaction.followup.send(content=resp_txt)
         except Exception as e:
             self.logger.exception("Failed to run /chat handler: %s", e)
+
+            try:
+                await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
+            except Exception as e:
+                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+
+    async def transcript(self, interaction: discord.Interaction):
+        """ /transcript
+        User gives the bot a prompt and it responds with GPT3.
+        Arguments:
+        - interaction: Slash command interaction
+        """
+        try:
+            self.logger.info("received /transcript")
+
+            await interaction.response.defer()
+
+            if not await self.check_channel_allowed(interaction):            
+                return
+
+            history = await self.conversation_history_repo.get(interaction.user.id)
+
+            transcript = "\n".join((await history.as_transcript_lines())[0])
+
+            interaction_txt = """\
+Here is our conversation:
+
+```
+{transcript}
+```""".format(transcript=transcript)
+
+            await interaction.followup.send(content=interaction_txt)
+
+        except Exception as e:
+            self.logger.exception("Failed to run /transcript handler: %s", e)
 
             try:
                 await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
