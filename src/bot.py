@@ -75,11 +75,13 @@ class DiscordBot(discord.Bot):
     Fields:
     - logger: Logger
     - guild_ids: Discord server IDs for which bot will respond
+    - channel_id: ID of channel which bot is allowed to be used, if None then responds in every channel
     - conversation_history_repo: Message history repository
     - openai_client: OpenAI API client
     """
     logger: logging.Logger
     guild_ids: List[int]
+    channel_id: Optional[int]
     conversation_history_repo: ConversationHistoryRepo
     openai_client: OpenAI
 
@@ -87,12 +89,15 @@ class DiscordBot(discord.Bot):
         self,
         logger: logging.Logger,
         guild_ids: List[int],
+        channel_id: Optional[int],
         conversation_history_repo: ConversationHistoryRepo,
         openai_client: OpenAI
     ) -> None:
         super().__init__(intents=discord.Intents.default())
         self.logger = logger
+
         self.guild_ids = guild_ids
+        self.channel_id = channel_id
 
         self.conversation_history_repo = conversation_history_repo
         self.conversation_history_repo.usernames_mapper = DiscordUsernamesMapper(self)
@@ -116,6 +121,16 @@ class DiscordBot(discord.Bot):
         """
         try:
             self.logger.info("received /chat %s", prompt)
+
+            # Check if we are being limited to a channel
+            if self.channel_id is not None and interaction.channel_id != self.channel_id:
+                self.logger.error("Message in wrong channel %d (only allowed in: %d)", interaction.channel_id, self.channel_id)
+                await interaction.response.send_message(
+                    ephemeral=True,
+                    content=self.compose_error_msg(f"Only allowed to respond to messages in the <#{self.channel_id}> channel")
+                )
+                return
+            
             await interaction.response.defer()
 
             # Check prompt isn't too long
@@ -185,9 +200,16 @@ async def run_bot():
 
     logger.info("Connected to Redis")
 
+    channel_id = os.getenv('DISCORD_CHANNEL_ID')
+    if len(channel_id) == 0:
+        channel_id = None
+    if channel_id is not None:
+        channel_id = int(channel_id)
+
     bot = DiscordBot(
         logger=logger.getChild("discord.bot"),
         guild_ids=[int(os.getenv('DISCORD_GUILD_ID'))],
+        channel_id=channel_id,
         conversation_history_repo=ConversationHistoryRepo(
             redis_client=redis_client,
             usernames_mapper=NullUsernamesMapper(),
