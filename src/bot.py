@@ -218,14 +218,17 @@ class DiscordBot(discord.Bot):
 
             history = await self.conversation_history_repo.get(interaction.user.id)
 
-            transcript = "\n".join((await history.as_transcript_lines())[0])
+            transcript_lines = []
+            for msg in history.messages:
+                username = await self.conversation_history_repo.usernames_mapper.get_username(msg.author_id)
+                transcript_lines.append(f"**{username}:** {msg.body}")
+
+            transcript = "\n".join(transcript_lines)
 
             interaction_txt = """\
 Here is our conversation:
 
-```
-{transcript}
-```""".format(transcript=transcript)
+{transcript}""".format(transcript=transcript)
 
             await interaction.followup.send(content=interaction_txt)
 
