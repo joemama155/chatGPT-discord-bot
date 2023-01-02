@@ -7,6 +7,9 @@ from src.message_history import ConversationHistoryRepo, UsernamesMapper, Histor
 from typing import Optional, List, Dict, Protocol
 import logging
 import os
+import re
+
+RM_LEADING_NEWLINES = re.compile("\n*(.*)")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -162,15 +165,21 @@ class DiscordBot(discord.Bot):
                     await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                     return
 
+                ai_resp_match = RM_LEADING_NEWLINES.match(ai_resp)
+                ai_resp = ai_resp_match.group(1)
+
                 history.messages[-1].body = ai_resp
                 await history.trim(MAX_PROMPT_LENGTH)
 
                 await history.save()
 
+                self.logger.info("%s -> %s", prompt, ai_resp)
+
                 resp_txt = """\
 > {prompt}
 > 
 > ~ <@{author_id}>
+
 {ai_resp}""".format(
                     prompt=prompt,
                     ai_resp=ai_resp,
