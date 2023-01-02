@@ -99,29 +99,13 @@ class DiscordBot(discord.Bot):
 
         self.openai_client = openai_client
 
-        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.wrap_cmd("/chat", self.chat))
+        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
 
     async def on_ready(self):
         self.logger.info("Ready")
 
     def compose_error_msg(self, msg: str) -> str:
         return f"> Error: {msg}"
-
-    def wrap_cmd(self, name: str, handler: DiscordInteractionHandler) -> DiscordInteractionHandler:
-        async def wrapped(interaction: discord.Interaction, *args, **kwargs):
-            try:
-                handler(interaction, *args, **kwargs)
-            except Exception as e:
-                self.logger.exception("Failed to run %s handler: %s", name, e)
-
-                try:
-                    interaction.followup.send(self.compose_error_msg("An unexpected error occurred"))
-                except Exception as e:
-                    self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
-
-
-        return wrapped
-
 
     async def chat(self, interaction: discord.Interaction, prompt: str):
         """ /chat <prompt>
@@ -130,45 +114,53 @@ class DiscordBot(discord.Bot):
         - interaction: Slash command interaction
         - prompt: Slash command prompt argument
         """
-        self.logger.info("received /chat %s", prompt)
-        await interaction.response.defer()
+        try:
+            self.logger.info("received /chat %s", prompt)
+            await interaction.response.defer()
 
-        # Check prompt isn't too long
-        if len(prompt) > MAX_PROMPT_LENGTH:
-            await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
-            return
-
-        # Record the user's prompt in their history
-        history = await self.conversation_history_repo.get(interaction.user.id)
-        with history.lock():
-            # Record user's prompt and a blank message for the AI
-            history.messages.extend([
-                HistoryMessage(
-                    author_id=interaction.user.id,
-                    body=prompt,
-                ),
-                HistoryMessage(
-                    author_id=self.user.id,
-                    body="",
-                ),
-            ])
-            await history.trim(MAX_PROMPT_LENGTH)
-
-            # Ask AI
-            transcript = "\n".join(await history.as_transcript_lines())
-            ai_resp = await self.openai_client.create_completion(transcript)
-            if ai_resp is None:
-                self.logger("No AI response")
-                await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
+            # Check prompt isn't too long
+            if len(prompt) > MAX_PROMPT_LENGTH:
+                await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
                 return
 
-            history.messages[-1].body = ai_resp
-            await history.trim(MAX_PROMPT_LENGTH)
+            # Record the user's prompt in their history
+            history = await self.conversation_history_repo.get(interaction.user.id)
+            async with await history.lock():
+                # Record user's prompt and a blank message for the AI
+                history.messages.extend([
+                    HistoryMessage(
+                        author_id=interaction.user.id,
+                        body=prompt,
+                    ),
+                    HistoryMessage(
+                        author_id=self.user.id,
+                        body="",
+                    ),
+                ])
+                await history.trim(MAX_PROMPT_LENGTH)
 
-            await history.save()
+                # Ask AI
+                transcript = "\n".join((await history.as_transcript_lines())[0])
+                ai_resp = await self.openai_client.create_completion(transcript)
+                if ai_resp is None:
+                    self.logger("No AI response")
+                    await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
+                    return
 
-            await interaction.followup.send(content=f"> {prompt}\n{ai_resp}")
+                history.messages[-1].body = ai_resp
+                await history.trim(MAX_PROMPT_LENGTH)
 
+                await history.save()
+
+                resp_txt = "> {prompt}\n{ai_resp}".format(prompt=prompt, ai_resp=ai_resp)
+                await interaction.followup.send(content=resp_txt)
+        except Exception as e:
+            self.logger.exception("Failed to run /chat handler: %s", e)
+
+            try:
+                await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
+            except Exception as e:
+                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
 async def run_bot():
     logger.info("Run bot started")
