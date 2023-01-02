@@ -1,9 +1,10 @@
 import discord
+import redis.asyncio as redis
 
 from src.openai_client import OpenAI, MAX_PROMPT_LENGTH
-from src.message_history import MessageHistoryRepo, UsernamesMapper, HistoryMessage, ConversationHistory
+from src.message_history import ConversationHistoryRepo, UsernamesMapper, HistoryMessage
 
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Protocol
 import logging
 import os
 
@@ -27,10 +28,15 @@ class DiscordUsernameNotFound(Exception):
         super().__init__(f"Username of user with ID '{user_id}' could not be found")
         self.user_id = user_id
 
+class NullUsernamesMapper(UsernamesMapper):
+    async def get_username(self, user_id: int) -> str:
+        return ""
+
 class DiscordUsernamesMapper(UsernamesMapper):
     """ Implements UsernamesMapper using Discord.
     Fields:
     - discord_client: Discord client
+    - cache: Records usernames which have already been retrieved, keys: user IDs, values: usernames
     """
     discord_client: discord.Client
     cache: Dict[int, str]
@@ -61,40 +67,61 @@ class DiscordUsernamesMapper(UsernamesMapper):
 
         return user.display_name
 
+class DiscordInteractionHandler(Protocol):
+    def __call__(self, interaction: discord.Interaction, *args, **kwargs) -> None: ...
+
 class DiscordBot(discord.Bot):
     """ Discord bot client.
     Fields:
     - logger: Logger
     - guild_ids: Discord server IDs for which bot will respond
-    - msg_history: Message history repository
+    - conversation_history_repo: Message history repository
     - openai_client: OpenAI API client
     """
     logger: logging.Logger
     guild_ids: List[int]
-    msg_history: MessageHistoryRepo
+    conversation_history_repo: ConversationHistoryRepo
     openai_client: OpenAI
 
-    def __init__(self, logger: logging.Logger, guild_ids: List[int], msg_history: MessageHistoryRepo, openai_client: OpenAI) -> None:
+    def __init__(
+        self,
+        logger: logging.Logger,
+        guild_ids: List[int],
+        conversation_history_repo: ConversationHistoryRepo,
+        openai_client: OpenAI
+    ) -> None:
         super().__init__(intents=discord.Intents.default())
         self.logger = logger
         self.guild_ids = guild_ids
 
-        self.msg_history = msg_history
+        self.conversation_history_repo = conversation_history_repo
+        self.conversation_history_repo.usernames_mapper = DiscordUsernamesMapper(self)
+
         self.openai_client = openai_client
 
-        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
+        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.wrap_cmd("/chat", self.chat))
 
     async def on_ready(self):
-        await self.msg_history.init(
-            usernames_mapper=DiscordUsernamesMapper(self),
-            redis_host=os.getenv('REDIS_HOST', "redis"),
-            redis_port=int(os.getenv('REDIS_PORT', "6379")),
-            redis_db=int(os.getenv('REDIS_DB', "0")),
-        )
         self.logger.info("Ready")
 
     def compose_error_msg(self, msg: str) -> str:
         return f"> Error: {msg}"
+
+    def wrap_cmd(self, name: str, handler: DiscordInteractionHandler) -> DiscordInteractionHandler:
+        async def wrapped(interaction: discord.Interaction, *args, **kwargs):
+            try:
+                handler(interaction, *args, **kwargs)
+            except Exception as e:
+                self.logger.exception("Failed to run %s handler: %s", name, e)
+
+                try:
+                    interaction.followup.send(self.compose_error_msg("An unexpected error occurred"))
+                except Exception as e:
+                    self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+
+
+        return wrapped
+
 
     async def chat(self, interaction: discord.Interaction, prompt: str):
         """ /chat <prompt>
@@ -104,69 +131,70 @@ class DiscordBot(discord.Bot):
         - prompt: Slash command prompt argument
         """
         self.logger.info("received /chat %s", prompt)
-        try:
-            await interaction.response.defer()
+        await interaction.response.defer()
 
-            # Check prompt isn't too long
-            if len(prompt) > MAX_PROMPT_LENGTH:
-                await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
-                return
+        # Check prompt isn't too long
+        if len(prompt) > MAX_PROMPT_LENGTH:
+            await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
+            return
 
-            # Record the user's prompt in their history
-            self.logger.info("Recording transcript")
-            bot_name = await self.msg_history.usernames_mapper.get_username(self.user.id)
-            history = await self.msg_history.append_message(
-                interaction.user.id,
-                msg=HistoryMessage(
+        # Record the user's prompt in their history
+        history = await self.conversation_history_repo.get(interaction.user.id)
+        with history.lock():
+            # Record user's prompt and a blank message for the AI
+            history.messages.extend([
+                HistoryMessage(
                     author_id=interaction.user.id,
                     body=prompt,
                 ),
-                max_conversation_characters=MAX_PROMPT_LENGTH - (len(prompt) + len(bot_name) + 2), # Length of the prompt, length of the bot username, and then length of the transcript line's ": "
-            )
+                HistoryMessage(
+                    author_id=self.user.id,
+                    body="",
+                ),
+            ])
+            await history.trim(MAX_PROMPT_LENGTH)
 
             # Ask AI
-            history.messages.append(HistoryMessage(
-                author_id=self.user.id,
-                body="",
-            ))
-            transcript = "\n".join(await history.as_transcript_lines(self.msg_history.usernames_mapper))
-
-            self.logger.info("Asking bot:\n%s", transcript)
-
+            transcript = "\n".join(await history.as_transcript_lines())
             ai_resp = await self.openai_client.create_completion(transcript)
             if ai_resp is None:
                 self.logger("No AI response")
                 await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                 return
 
-            await self.msg_history.append_message(
-                interacting_user_id=interaction.user.id,
-                msg=HistoryMessage(
-                    author_id=self.user.id,
-                    body=ai_resp,
-                ),
-                max_conversation_characters=MAX_PROMPT_LENGTH,
-            )
+            history.messages[-1].body = ai_resp
+            await history.trim(MAX_PROMPT_LENGTH)
 
-            await interaction.followup.send(content=ai_resp)
-        except Exception as e:
-            self.logger.exception("Failed to handled /chat command: %s", e)
+            await history.save()
 
-            try:
-                await interaction.followup.send(content=self.compose_error_msg("Unknown error occurred"))
-            except Exception as e:
-                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+            await interaction.followup.send(content=f"> {prompt}\n{ai_resp}")
 
 
 async def run_bot():
     logger.info("Run bot started")
 
+    logger.info("Connecting to Redis")
+
+    redis_client = redis.Redis(
+        host=os.getenv('REDIS_HOST', "redis"),
+        port=int(os.getenv('REDIS_PORT', "6379")),
+        db=int(os.getenv('REDIS_DB', "0")),
+    )
+
+    await redis_client.ping()
+
+    logger.info("Connected to Redis")
+
     bot = DiscordBot(
         logger=logger.getChild("discord.bot"),
         guild_ids=[int(os.getenv('DISCORD_GUILD_ID'))],
-        msg_history=MessageHistoryRepo(),
+        conversation_history_repo=ConversationHistoryRepo(
+            redis_client=redis_client,
+            usernames_mapper=NullUsernamesMapper(),
+        ),
         openai_client=OpenAI(),
     )
-    bot.msg_history.discord_client = bot
+
+    logger.info("Starting bot")
     
     await bot.start(os.getenv('DISCORD_BOT_TOKEN'))
