@@ -152,7 +152,15 @@ class DiscordBot(discord.Bot):
 
                 await history.save()
 
-                resp_txt = "> {prompt}\n{ai_resp}".format(prompt=prompt, ai_resp=ai_resp)
+                resp_txt = """\
+> {prompt}
+> 
+> ~ <@{author_id}>
+{ai_resp}""".format(
+                    prompt=prompt,
+                    ai_resp=ai_resp,
+                    author_id=interaction.user.id,
+                )
                 await interaction.followup.send(content=resp_txt)
         except Exception as e:
             self.logger.exception("Failed to run /chat handler: %s", e)
