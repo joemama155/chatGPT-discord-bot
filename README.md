@@ -42,10 +42,10 @@ pipenv shell
 Then run the bot:
 
 ```
-./main.py
+python ./main.py
 ```
 
-The [`Dockerfile`](./Dockerfile) in the repository root performs these steps automatically.
+The [`Dockerfile`](./Dockerfile) in the repository root performs these steps automatically. The [`docker-compose-prod.yaml`](./docker-compose-prod.yaml) file runs this Docker image.
 
 # Development
 The [`docker-compose.yaml`](./docker-compose.yaml) and [`dev.Dockerfile`](./dev.Dockerfile) files provide a development environment which is pre-setup. To use:

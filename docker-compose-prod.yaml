@@ -1,0 +1,10 @@
+version: "3"
+services:
+  chatgpt-discord-bot:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+    env_file:
+      - dev.env
+  redis:
+    image: redis:7.0.7-alpine
