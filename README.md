@@ -5,6 +5,7 @@ Provides access to OpenAI models via a Discord bot.
 - [Overview](#overview)
 - [Setup](#setup)
 - [Development](#development)
+- [Release Instructions](#release-instructions)
 
 # Overview
 A Python Discord bot which provides access to OpenAI's GPT3. Inspired by [@Zero6992's chatGPT-discord-bot repository](https://github.com/Zero6992/chatGPT-discord-bot). Provides the modifications:
@@ -55,3 +56,19 @@ The [`docker-compose.yaml`](./docker-compose.yaml) and [`dev.Dockerfile`](./dev.
    ```
    docker compose up -d --build
    ```
+
+# Release Instructions
+1. Build the Docker image:
+   ```
+   docker build -t noahhuppert/chatgpt-discord-bot:vx.y.z
+   ```
+2. Push the Docker image
+   ```
+   docker push noahhuppert/chatgpt-discord-bot:vx.y.z
+   ```
+3. Create a new [GitHub Release](https://github.com/Noah-Huppert/chatGPT-discord-bot/releases)
+   - Include a short description of the changes
+   - Include the Docker image tag by writing:
+     ```
+     Docker image: `noahhuppert/chatgpt-discord-bot:vx.y.z
+     ```
