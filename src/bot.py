@@ -9,7 +9,7 @@ import logging
 import os
 import re
 
-RM_LEADING_NEWLINES = re.compile("\n*(.*)")
+TRIM_FRONT_PATTERN = re.compile("[ \r\n]")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,9 +107,9 @@ class DiscordBot(discord.Bot):
 
         self.openai_client = openai_client
 
-        self.slash_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
-        self.slash_command(name="transcript", description="Reveal the chat transcript being recorded by the bot", guild_ids=self.guild_ids)(self.transcript)
-        self.slash_command(name="clear-transcript", description="Clear the transcript of you and the bots previous messages", guild_ids=self.guild_ids)(self.clear_transcript)
+        self.application_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
+        self.application_command(name="transcript", description="Reveal the chat transcript being recorded by the bot", guild_ids=self.guild_ids)(self.transcript)
+        self.application_command(name="clear-transcript", description="Clear the transcript of you and the bots previous messages", guild_ids=self.guild_ids)(self.clear_transcript)
 
     async def on_ready(self):
         self.logger.info("Ready")
@@ -174,24 +174,29 @@ class DiscordBot(discord.Bot):
                     await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                     return
 
-                ai_resp_match = RM_LEADING_NEWLINES.match(ai_resp)
-                ai_resp = ai_resp_match.group(1)
+                trimmed_resp = ""
 
-                history.messages[-1].body = ai_resp
+                for c in ai_resp:
+                    if TRIM_FRONT_PATTERN.match(c) is not None and len(trimmed_resp) == 0:
+                        continue
+                    else:
+                        trimmed_resp += c
+
+                history.messages[-1].body = trimmed_resp
                 await history.trim(MAX_PROMPT_LENGTH)
 
                 await history.save()
 
-                self.logger.info("%s -> %s", prompt, ai_resp)
+                self.logger.info("%s -> %s", prompt, trimmed_resp)
 
                 resp_txt = """\
 > {prompt}
 > 
 > ~ <@{author_id}>
 
-{ai_resp}""".format(
+{trimmed_resp}""".format(
                     prompt=prompt,
-                    ai_resp=ai_resp,
+                    trimmed_resp=trimmed_resp,
                     author_id=interaction.user.id,
                 )
                 await interaction.followup.send(content=resp_txt)
