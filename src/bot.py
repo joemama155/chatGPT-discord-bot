@@ -115,6 +115,11 @@ class DiscordBot(discord.Bot):
             guild_ids=self.guild_ids,
         )(self.chat)
         self.application_command(
+            name="incognito-chat",
+            description="Send a prompt to the bot without providing or saving any conversation history",
+            guild_ids=guild_ids,            
+        )(self.incognito_chat)
+        self.application_command(
             name="transcript",
             description="Reveal the chat transcript being recorded by the bot",
             guild_ids=self.guild_ids,
@@ -191,8 +196,7 @@ class DiscordBot(discord.Bot):
             description="Text to send to the bot",
         ),
     ):
-        """ /chat <prompt>
-        User gives the bot a prompt and it responds with GPT3.
+        """ /chat <prompt> - User gives the bot a prompt and it responds with GPT3.
         Arguments:
         - interaction: Slash command interaction
         - prompt: Slash command prompt argument
@@ -268,6 +272,66 @@ class DiscordBot(discord.Bot):
             except Exception as e:
                 self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
+    async def incognito_chat(
+        self,
+        interaction: discord.Interaction,
+        prompt: discord.Option(
+            input_type=str,
+            description="Text to send to the bot",
+        ),
+    ):
+        """ /incognito-chat - Provides a prompt to the OpenAI model without providing a chat transcript or recording the answer.
+        """
+        try:
+            self.logger.info("received /incognito-chat %s", prompt)
+
+            await interaction.response.defer()
+
+            if not await self.check_channel_allowed(interaction):            
+                return
+
+            # Check prompt isn't too long
+            if len(prompt) > MAX_PROMPT_LENGTH:
+                await interaction.followup.send(content=self.compose_error_msg(f"Prompt cannot me longer than {MAX_PROMPT_LENGTH} characters"))
+                return
+
+            # Ask AI
+            ai_resp = await self.openai_client.create_completion(prompt)
+            if ai_resp is None:
+                self.logger("No AI response")
+                await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
+                return
+            
+            # Trim leading newlines and whitespace
+            ai_resp_match = RM_LEADING_NEWLINES.search(ai_resp)
+            ai_resp = ai_resp_match.group(1) + ai_resp[ai_resp_match.span(1)[1]:]
+
+            # Send Discord response
+            self.logger.info("%s -> %s", prompt, ai_resp)
+
+            resp_txt = """\
+:detective: *Incognito mode, no chat transcript provided to the AI, not saved either* :detective:
+
+> {prompt}
+> 
+> ~ <@{author_id}>
+
+{ai_resp}""".format(
+                prompt=prompt,
+                ai_resp=ai_resp,
+                author_id=interaction.user.id,
+            )
+
+            for batch in self.batch_response(resp_txt):
+                await interaction.followup.send(content=batch)
+        except Exception as e:
+            self.logger.exception("Failed to run /incognito-chat handler: %s", e)
+
+            try:
+                await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
+            except Exception as e:
+                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+
     async def transcript(
         self,
         interaction: discord.Interaction,
@@ -277,8 +341,7 @@ class DiscordBot(discord.Bot):
             description="If the transcript should be sent so everyone can see it",
         )=False,
     ):
-        """ /transcript
-        Prints the user and bots transcript.
+        """ /transcript - Prints the user and bots transcript.
         Arguments:
         - interaction: Slash command interaction
         """
@@ -324,8 +387,7 @@ Here is our conversation:
                 self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
     async def clear_transcript(self, interaction: discord.Interaction):
-        """ /clear-transcript
-        Delete the user's message history.
+        """ /clear-transcript - Delete the user's message history.
         Arguments:
         - interaction: Slash command interaction
         """
