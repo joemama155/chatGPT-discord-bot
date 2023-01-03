@@ -160,7 +160,7 @@ class ConversationHistoryRepoObject:
         while transcript_len > max_characters:
             # Remove oldest messages
             removed_msg = self.messages.pop(0)
-            transcript_len -= len(removed_msg.as_transcript_str(self._usernames_mapper))
+            transcript_len -= len(await removed_msg.as_transcript_str(self._usernames_mapper))
 
 class ConversationHistoryRepo:
     """ Retrieves conversation history objects.
