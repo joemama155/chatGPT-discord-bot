@@ -109,9 +109,22 @@ class DiscordBot(discord.Bot):
 
         self.openai_client = openai_client
 
-        self.application_command(name="chat", description="Chat with GPT3", guild_ids=self.guild_ids)(self.chat)
-        self.application_command(name="transcript", description="Reveal the chat transcript being recorded by the bot", guild_ids=self.guild_ids)(self.transcript)
-        self.application_command(name="clear-transcript", description="Clear the transcript of you and the bots previous messages", guild_ids=self.guild_ids)(self.clear_transcript)
+        self.application_command(
+            name="chat",
+            description="Chat with GPT3",
+            guild_ids=self.guild_ids,
+        )(self.chat)
+        self.application_command(
+            name="transcript",
+            description="Reveal the chat transcript being recorded by the bot",
+            guild_ids=self.guild_ids,
+
+        )(self.transcript)
+        self.application_command(
+            name="clear-transcript",
+            description="Clear the transcript of you and the bots previous messages",
+            guild_ids=self.guild_ids,
+        )(self.clear_transcript)
 
     async def on_ready(self):
         self.logger.info("Ready")
@@ -170,7 +183,14 @@ class DiscordBot(discord.Bot):
 
         return True
 
-    async def chat(self, interaction: discord.Interaction, prompt: str):
+    async def chat(
+        self,
+        interaction: discord.Interaction,
+        prompt: discord.Option(
+            input_type=str,
+            description="Text to send to the bot",
+        ),
+    ):
         """ /chat <prompt>
         User gives the bot a prompt and it responds with GPT3.
         Arguments:
@@ -248,7 +268,15 @@ class DiscordBot(discord.Bot):
             except Exception as e:
                 self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
-    async def transcript(self, interaction: discord.Interaction):
+    async def transcript(
+        self,
+        interaction: discord.Interaction,
+        show_publicly: discord.Option(
+            input_type=str,
+            name="show-publicly",
+            description="If the transcript should be sent so everyone can see it",
+        )=False,
+    ):
         """ /transcript
         Prints the user and bots transcript.
         Arguments:
@@ -257,7 +285,7 @@ class DiscordBot(discord.Bot):
         try:
             self.logger.info("received /transcript")
 
-            await interaction.response.defer()
+            await interaction.response.defer(ephemeral=not show_publicly)
 
             if not await self.check_channel_allowed(interaction):            
                 return
@@ -285,7 +313,7 @@ Here is our conversation:
 {transcript}""".format(transcript=transcript)
 
             for batch in self.batch_response(interaction_txt):
-                await interaction.followup.send(content=batch)
+                await interaction.followup.send(content=batch, ephemeral=not show_publicly)
 
         except Exception as e:
             self.logger.exception("Failed to run /transcript handler: %s", e)
