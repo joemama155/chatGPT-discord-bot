@@ -249,7 +249,11 @@ class DiscordBot(discord.Bot):
                 await history.save()
 
                 # Send Discord response
-                self.logger.info("%s -> %s", prompt, ai_resp)
+                self.logger.info(
+                    "%s: '%s'\n%s: '%s'",
+                    await self.conversation_history_repo.usernames_mapper.get_username(interaction.user.id), prompt,
+                    await self.conversation_history_repo.usernames_mapper.get_username(self.user.id), ai_resp,
+                )
 
                 resp_txt = """\
 > {prompt}
@@ -307,7 +311,11 @@ class DiscordBot(discord.Bot):
             ai_resp = ai_resp_match.group(1) + ai_resp[ai_resp_match.span(1)[1]:]
 
             # Send Discord response
-            self.logger.info("%s -> %s", prompt, ai_resp)
+            self.logger.info(
+                "%s: '%s'\n%s: '%s'",
+                await self.conversation_history_repo.usernames_mapper.get_username(interaction.user.id), prompt,
+                await self.conversation_history_repo.usernames_mapper.get_username(self.user.id), ai_resp,
+            )
 
             resp_txt = """\
 :detective: *Incognito mode, no chat transcript provided to the AI, not saved either* :detective:
