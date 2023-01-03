@@ -9,7 +9,7 @@ import logging
 import os
 import re
 
-TRIM_FRONT_PATTERN = re.compile("[ \r\n]")
+RM_LEADING_NEWLINES = re.compile("^[ \r\n]*(.*)$", re.M)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -173,30 +173,28 @@ class DiscordBot(discord.Bot):
                     self.logger("No AI response")
                     await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                     return
+                
+                # Trim leading newlines and whitespace
+                ai_resp_match = RM_LEADING_NEWLINES.search(ai_resp)
+                ai_resp = ai_resp_match.group(1) + ai_resp[ai_resp_match.span(1)[1]:]
 
-                trimmed_resp = ""
-
-                for c in ai_resp:
-                    if TRIM_FRONT_PATTERN.match(c) is not None and len(trimmed_resp) == 0:
-                        continue
-                    else:
-                        trimmed_resp += c
-
-                history.messages[-1].body = trimmed_resp
+                # Record AI response in history
+                history.messages[-1].body = ai_resp
                 await history.trim(MAX_PROMPT_LENGTH)
 
                 await history.save()
 
-                self.logger.info("%s -> %s", prompt, trimmed_resp)
+                # Send Discord response
+                self.logger.info("%s -> %s", prompt, ai_resp)
 
                 resp_txt = """\
 > {prompt}
 > 
 > ~ <@{author_id}>
 
-{trimmed_resp}""".format(
+{ai_resp}""".format(
                     prompt=prompt,
-                    trimmed_resp=trimmed_resp,
+                    ai_resp=ai_resp,
                     author_id=interaction.user.id,
                 )
                 await interaction.followup.send(content=resp_txt)
