@@ -46,7 +46,7 @@ class HistoryMessage(BaseModel):
         - usernames_mapper: Implementation of username mapper
         Returns: History message in format <username>: <body>
         """
-        username, body = self.as_transcript_tuple(usernames_mapper)
+        username, body = await self.as_transcript_tuple(usernames_mapper)
         return f"{username}: {body}"
 
 class ConversationHistoryLock:
