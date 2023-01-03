@@ -32,13 +32,22 @@ class HistoryMessage(BaseModel):
     author_id: int
     body: str
 
+    async def as_transcript_tuple(self, usernames_mapper: UsernamesMapper) -> str:
+        """ Convert history message into a tuple (username, message body)
+        Arguments:
+        - usernames_mapper: Implementation of username mapper
+        Returns: Tuple (username, message body)
+        """
+        return (await usernames_mapper.get_username(self.author_id), self.body)
+
     async def as_transcript_str(self, usernames_mapper: UsernamesMapper) -> str:
         """ Convert history message into a script format string.
         Arguments:
         - usernames_mapper: Implementation of username mapper
         Returns: History message in format <username>: <body>
         """
-        return f"{await usernames_mapper.get_username(self.author_id)}: {self.body}"
+        username, body = self.as_transcript_tuple(usernames_mapper)
+        return f"{username}: {body}"
 
 class ConversationHistoryLock:
     redis_lock: RedisLock

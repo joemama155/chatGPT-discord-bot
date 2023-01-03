@@ -11,6 +11,8 @@ import re
 
 RM_LEADING_NEWLINES = re.compile("^[ \r\n]*(.*)$", re.M)
 
+MAX_DISCORD_MSG_LENGTH = 2000
+
 logging.basicConfig(
     level=logging.INFO,
     handlers=[
@@ -117,6 +119,44 @@ class DiscordBot(discord.Bot):
     def compose_error_msg(self, msg: str) -> str:
         return f"> Error: {msg}"
 
+    def batch_response(self, in_msg: str, batch_size: int = MAX_DISCORD_MSG_LENGTH) -> List[str]:
+        """ Break up a Discord message reply into messages which are less than the limit. 
+        Breaks by word. If not possible breaks by character.
+        Arguments:
+        - in_msg: The unbroken up message
+
+        Returns: Message parts
+        """
+        batches = []
+        current_batch = ""
+        for word in in_msg.split(" "):
+            # Add back the space we split by
+            word += " "
+
+            # If word is bigger than a single batch, break by character
+            if len(word) > batch_size:
+                while len(word) > 0:
+                    remaining_batch_size = batch_size - len(current_batch)
+
+                    current_batch += word[:remaining_batch_size]
+                    word = word[remaining_batch_size:]
+
+                    if current_batch == batch_size:
+                        batches.append(current_batch)
+                        current_batch = ""
+            else:
+                # Otherwise break by word
+                if len(current_batch) + len(word) <= batch_size:
+                    current_batch += word
+                else:
+                    batches.append(current_batch)
+                    current_batch = word
+
+        if len(current_batch) > 0:
+            batches.append(current_batch)
+
+        return batches
+
     async def check_channel_allowed(self, interaction: discord.Interaction) -> bool:
         # Check if we are being limited to a channel
         if self.channel_id is not None and interaction.channel_id != self.channel_id:
@@ -197,7 +237,9 @@ class DiscordBot(discord.Bot):
                     ai_resp=ai_resp,
                     author_id=interaction.user.id,
                 )
-                await interaction.followup.send(content=resp_txt)
+
+                for batch in self.batch_response(resp_txt):
+                    await interaction.followup.send(content=batch)
         except Exception as e:
             self.logger.exception("Failed to run /chat handler: %s", e)
 
@@ -224,12 +266,16 @@ class DiscordBot(discord.Bot):
 
             transcript_lines = []
             for msg in history.messages:
-                username = await self.conversation_history_repo.usernames_mapper.get_username(msg.author_id)
-                transcript_lines.append(f"**{username}:** {msg.body}")
+                username, body = await msg.as_transcript_tuple(self.conversation_history_repo.usernames_mapper)
+                username_md = f"**{username}:** "
+
+                # Pre-batch any body's here so that we don't batch message and split the markdown of the username
+                for batch in self.batch_response(body, batch_size=MAX_DISCORD_MSG_LENGTH - len(username_md)):
+                    transcript_lines.append(f"{username_md}{batch}")
 
             transcript = ""
             if len(history.messages) > 0:
-                transcript = "\n".join(transcript_lines)
+                transcript = "\n\n".join(transcript_lines)
             else:
                 transcript = "*No transcript history*"
 
@@ -238,7 +284,8 @@ Here is our conversation:
 
 {transcript}""".format(transcript=transcript)
 
-            await interaction.followup.send(content=interaction_txt)
+            for batch in self.batch_response(interaction_txt):
+                await interaction.followup.send(content=batch)
 
         except Exception as e:
             self.logger.exception("Failed to run /transcript handler: %s", e)
