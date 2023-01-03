@@ -210,8 +210,10 @@ class DiscordBot(discord.Bot):
         - interaction: Slash command interaction
         - prompt: Slash command prompt argument
         """
+        logger = self.logger.getChild("command.chat")
+
         try:
-            self.logger.info("received /chat %s", prompt)
+            logger.info("received /chat %s", prompt)
 
             if not await self.check_channel_allowed(interaction):            
                 return
@@ -243,7 +245,7 @@ class DiscordBot(discord.Bot):
                 transcript = "\n".join((await history.as_transcript_lines())[0])
                 ai_resp = await self.openai_client.create_completion(transcript)
                 if ai_resp is None:
-                    self.logger("No AI response")
+                    logger("No AI response")
                     await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                     return
                 
@@ -258,7 +260,7 @@ class DiscordBot(discord.Bot):
                 await history.save()
 
                 # Send Discord response
-                self.logger.info(
+                logger.info(
                     "%s: '%s'\n%s: '%s'",
                     await self.conversation_history_repo.usernames_mapper.get_username(interaction.user.id), prompt,
                     await self.conversation_history_repo.usernames_mapper.get_username(self.user.id), ai_resp,
@@ -278,12 +280,12 @@ class DiscordBot(discord.Bot):
                 for batch in self.batch_response(resp_txt):
                     await interaction.followup.send(content=batch)
         except Exception as e:
-            self.logger.exception("Failed to run /chat handler: %s", e)
+            logger.exception("Failed to run /chat handler: %s", e)
 
             try:
                 await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
             except Exception as e:
-                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+                logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
     async def incognito_chat(
         self,
@@ -295,8 +297,10 @@ class DiscordBot(discord.Bot):
     ):
         """ /incognito-chat - Provides a prompt to the OpenAI model without providing a chat transcript or recording the answer.
         """
+        logger = self.logger.getChild("command.incognito-chat")
+
         try:
-            self.logger.info("received /incognito-chat %s", prompt)
+            logger.info("received /incognito-chat %s", prompt)
 
             if not await self.check_channel_allowed(interaction):            
                 return
@@ -311,7 +315,7 @@ class DiscordBot(discord.Bot):
             # Ask AI
             ai_resp = await self.openai_client.create_completion(prompt)
             if ai_resp is None:
-                self.logger("No AI response")
+                logger("No AI response")
                 await interaction.followup.send(self.compose_error_msg("The AI did not know what to say"))
                 return
             
@@ -320,7 +324,7 @@ class DiscordBot(discord.Bot):
             ai_resp = ai_resp_match.group(1) + ai_resp[ai_resp_match.span(1)[1]:]
 
             # Send Discord response
-            self.logger.info(
+            logger.info(
                 "%s: '%s'\n%s: '%s'",
                 await self.conversation_history_repo.usernames_mapper.get_username(interaction.user.id), prompt,
                 await self.conversation_history_repo.usernames_mapper.get_username(self.user.id), ai_resp,
@@ -342,12 +346,12 @@ class DiscordBot(discord.Bot):
             for batch in self.batch_response(resp_txt):
                 await interaction.followup.send(content=batch)
         except Exception as e:
-            self.logger.exception("Failed to run /incognito-chat handler: %s", e)
+            logger.exception("Failed to run /incognito-chat handler: %s", e)
 
             try:
                 await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
             except Exception as e:
-                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+                logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
     async def transcript(
         self,
@@ -362,8 +366,10 @@ class DiscordBot(discord.Bot):
         Arguments:
         - interaction: Slash command interaction
         """
+        logger = self.logger.getChild("command.transcript")
+
         try:
-            self.logger.info("received /transcript")
+            logger.info("received /transcript")
 
             if not await self.check_channel_allowed(interaction):            
                 return
@@ -396,20 +402,22 @@ Here is our conversation:
                 await interaction.followup.send(content=batch, ephemeral=not show_publicly)
 
         except Exception as e:
-            self.logger.exception("Failed to run /transcript handler: %s", e)
+            logger.exception("Failed to run /transcript handler: %s", e)
 
             try:
                 await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
             except Exception as e:
-                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+                logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
     async def clear_transcript(self, interaction: discord.Interaction):
         """ /clear-transcript - Delete the user's message history.
         Arguments:
         - interaction: Slash command interaction
         """
+        logger = self.logger.getChild("command.clear-transcript")
+
         try:
-            self.logger.info("received /clear-transcript")
+            logger.info("received /clear-transcript")
 
             if not await self.check_channel_allowed(interaction):            
                 return
@@ -426,12 +434,12 @@ Here is our conversation:
             await interaction.followup.send(content="I have cleared our conversation history, all is forgotten :wink:")
 
         except Exception as e:
-            self.logger.exception("Failed to run /transcript handler: %s", e)
+            logger.exception("Failed to run /transcript handler: %s", e)
 
             try:
                 await interaction.followup.send(content=self.compose_error_msg("An unexpected error occurred"))
             except Exception as e:
-                self.logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
+                logger.exception("While trying to send an 'unknown error' message to the user, an exception occurred: %s", e)
 
 async def run_bot():
     logger.info("Run bot started")
@@ -455,7 +463,7 @@ async def run_bot():
         channel_id = int(channel_id)
 
     bot = DiscordBot(
-        logger=logger.getChild("discord.bot"),
+        logger=logger.getChild("discord_bot"),
         guild_ids=[int(os.getenv('DISCORD_GUILD_ID'))],
         channel_id=channel_id,
         conversation_history_repo=ConversationHistoryRepo(
