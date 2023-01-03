@@ -176,10 +176,19 @@ class DiscordBot(discord.Bot):
         return batches
 
     async def check_channel_allowed(self, interaction: discord.Interaction) -> bool:
+        """ Ensure that the bot is allowed to send a message in the channel the interaction occurred.
+        If the channel ID limiter variable is not set then any channel is allowed.
+        Must be called before the interaction is deferred or replied to in any way.
+
+        Arguments:
+        - interaction: The interaction to check
+
+        Returns: True if the bot is allowed, False if the bot replied with a not allowed message and the interaction should not continue
+        """
         # Check if we are being limited to a channel
         if self.channel_id is not None and interaction.channel_id != self.channel_id:
             self.logger.error("Message in wrong channel %d (only allowed in: %d)", interaction.channel_id, self.channel_id)
-            await interaction.followup.send_message(
+            await interaction.response.send_message(
                 ephemeral=True,
                 content=self.compose_error_msg(f"Only allowed to respond to messages in the <#{self.channel_id}> channel")
             )
@@ -204,10 +213,10 @@ class DiscordBot(discord.Bot):
         try:
             self.logger.info("received /chat %s", prompt)
 
-            await interaction.response.defer()
-
             if not await self.check_channel_allowed(interaction):            
                 return
+
+            await interaction.response.defer()
 
             # Check prompt isn't too long
             if len(prompt) > MAX_PROMPT_LENGTH:
@@ -289,10 +298,10 @@ class DiscordBot(discord.Bot):
         try:
             self.logger.info("received /incognito-chat %s", prompt)
 
-            await interaction.response.defer()
-
             if not await self.check_channel_allowed(interaction):            
                 return
+
+            await interaction.response.defer()
 
             # Check prompt isn't too long
             if len(prompt) > MAX_PROMPT_LENGTH:
@@ -356,10 +365,10 @@ class DiscordBot(discord.Bot):
         try:
             self.logger.info("received /transcript")
 
-            await interaction.response.defer(ephemeral=not show_publicly)
-
             if not await self.check_channel_allowed(interaction):            
                 return
+
+            await interaction.response.defer(ephemeral=not show_publicly)
 
             history = await self.conversation_history_repo.get(interaction.user.id)
 
@@ -402,10 +411,10 @@ Here is our conversation:
         try:
             self.logger.info("received /clear-transcript")
 
-            await interaction.response.defer()
-
             if not await self.check_channel_allowed(interaction):            
                 return
+
+            await interaction.response.defer()
 
             history = await self.conversation_history_repo.get(interaction.user.id)
 
