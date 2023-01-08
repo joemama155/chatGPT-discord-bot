@@ -197,6 +197,14 @@ class DiscordBot(discord.Bot):
 
         return True
 
+     async def on_message(client,message):
+        if client.user.id != message.author.id:
+            if 'foo' in message.content:
+                await client.send_message(message.channel, 'bar')
+
+        client.add_listener(DiscordBot.on_message)
+        DiscordBot.run(os.getenv('DISCORD_BOT_TOKEN'))
+    
     async def chat(
         self,
         interaction: discord.Interaction,
