@@ -203,7 +203,6 @@ class DiscordBot(discord.Bot):
                 await client.send_message(message.channel, 'bar')
 
         client.add_listener(DiscordBot.on_message)
-        DiscordBot.run(os.getenv('DISCORD_BOT_TOKEN'))
     
     async def chat(
         self,
